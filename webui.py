@@ -9,7 +9,7 @@ from modules.ui import create_ui
 
 
 def ensure_output_dirs():
-    folders = ["outputs/save", "outputs/markdown"]
+    folders = ["outputs/save", "outputs/markdown","outputs/voices"]
 
     def check_and_create(p):
         if not os.path.exists(p):

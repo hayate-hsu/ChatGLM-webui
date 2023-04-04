@@ -6,12 +6,28 @@ from modules import options
 from modules.context import Context
 from modules.model import infer
 
+from model_vits import vits
+
+# import librosa
+
+
 css = "style.css"
 script_path = "scripts"
 _gradio_template_response_orig = gr.routes.templates.TemplateResponse
 
+vits = vits.Vits()
+def tts(text):
+    if text:
+        blocks = text.split("<br/>")
+        text = ''.join(blocks)
+        result = vits.generateSound(text)
+        # audio path
+        vocie_path = os.path.abspath(result[-1])
+        print('voice_path:'+vocie_path)
+        
+        return '<audio controls="" autoplay="autoplay" preload="metadata" src="http://127.0.0.1:17860/file={}"></audio>'.format(vocie_path)
 
-def predict(ctx, query, max_length, top_p, temperature, use_stream_chat):
+def predict(ctx, query, max_length, top_p, temperature, use_stream_chat,bspk_assist):
     ctx.limit_round()
     flag = True
     for _, output in infer(
@@ -28,9 +44,13 @@ def predict(ctx, query, max_length, top_p, temperature, use_stream_chat):
         else:
             ctx.update_last(query, output)
         yield ctx.rh, ""
+        
     ctx.refresh_last()
+    if bspk_assist:
+        query,output = ctx.rh[-1]
+        output = '<br/>'.join([output,tts(output)])
+        ctx.rh[-1] = (query,output)
     yield ctx.rh, ""
-
 
 def clear_history(ctx):
     ctx.clear()
@@ -41,6 +61,17 @@ def apply_max_round_click(ctx, max_round):
     ctx.max_rounds = max_round
     return f"Applied: max round {ctx.max_rounds}"
 
+def set_spk(bspk_assist,spk_name):
+    assert bspk_assist and spk_name, 'selected spks: {}, bspk assist: {}, must set'.format(spk_name,bspk_assist)
+    # 使用语音助手，relaod model
+    vits.set_spk(spk_name)
+    return
+
+def show_spks(bselect):
+    if bselect:
+        return gr.update(visible=True)
+    else:
+        return gr.update(visible=False)
 
 def create_ui():
     reload_javascript()
@@ -62,7 +93,21 @@ def create_ui():
                         with gr.Row():
                             max_rounds = gr.Slider(minimum=1, maximum=100, step=1, label="最大对话轮数", value=20)
                             apply_max_rounds = gr.Button("✔", elem_id="del-btn")
-
+                                            
+                        with gr.Row():
+                            # todo call from sovits module
+                            bspk_assist = gr.Checkbox(value=False,label='是否启用语音助手',info='use vits convert text to speech',elem_id='spk_assister')  
+                        with gr.Row():
+                            spk_name = gr.Dropdown(choices=vits.get_spks(),value='',label="请选择你的播报员", visible=False)
+                                
+                        bspk_assist.change(fn=show_spks,
+                                        inputs=bspk_assist,
+                                        outputs=spk_name
+                                        )
+                        spk_name.change(fn=set_spk,
+                                        inputs=[bspk_assist,spk_name],
+                                        outputs=[]
+                                        )
                         cmd_output = gr.Textbox(label="Command Output")
                         with gr.Row():
                             use_stream_chat = gr.Checkbox(label='使用流式输出', value=True)
@@ -99,11 +144,13 @@ def create_ui():
             max_length,
             top_p,
             temperature,
-            use_stream_chat
+            use_stream_chat,
+            bspk_assist
         ], outputs=[
             chatbot,
             input_message
         ])
+        
         revoke_btn.click(lambda ctx: ctx.revoke(), inputs=[state], outputs=[chatbot])
         clear_history_btn.click(clear_history, inputs=[state], outputs=[chatbot])
         clear_input.click(lambda x: "", inputs=[input_message], outputs=[input_message])
