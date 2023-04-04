@@ -13,7 +13,7 @@ os.environ['PATH'] = os.environ.get("PATH", "") + os.pathsep + os.path.join(sysc
 
 
 def ensure_output_dirs():
-    folders = ["outputs/save", "outputs/markdown"]
+    folders = ["outputs/save", "outputs/markdown","outputs/voices"]
 
     def check_and_create(p):
         if not os.path.exists(p):
